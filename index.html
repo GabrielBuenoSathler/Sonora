@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+
+<body>
+    <button id="startCameraButton" onclick="startCamera()">Start Camera</button>
+    <video id="camera" autoplay width="320" height="240" style="display: none;"></video>
+    <canvas id="canvas" width="64" height="64" style="display: none;"></canvas>
+    <p id="predictionResult"></p>
+    <div id="container">
+        <video id="videoElement" style="display: none;"></video>
+    </div>
+    <div>
+        <label for="cameraSelect">Select a camera:</label>
+        <select id="cameraSelect"></select>
+    </div>
+
+    <audio id="audio-cadeira" src="cadeira.mp3" style="display: none;"></audio>
+    <audio id="audio-close" src="fechada.mp3" style="display: none;"></audio>
+    <audio id="audio-mesa" src="mesa.mp3" style="display: none;"></audio>
+    <audio id="audio-open" src="aberta.mp3" style="display: none;"></audio>
+
+
+    <script>
+        const audioCadeira = document.getElementById('audio-cadeira');
+        const audioClose = document.getElementById('audio-close');
+        const audioMesa = document.getElementById('audio-mesa');
+        const audioOpen = document.getElementById('audio-open');
+        async function startCamera() {
+            const startButton = document.getElementById('startCameraButton');
+            const video = document.getElementById('camera');
+            startButton.style.display = 'none';
+
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
+
+            video.onloadedmetadata = () => {
+                video.style.display = 'block';
+                runModel(video);
+            };
+        }
+
+        async function runModel(videoElement) {
+            const model = await tf.loadLayersModel('pesos_7/model.json');
+            const video = videoElement;
+            video.play();
+
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+            const predictionResult = document.getElementById('predictionResult');
+
+            async function predict() {
+                context.drawImage(video, 0, 0, 64, 64); // Resize the image to match the model's input shape
+                const imageData = tf.browser.fromPixels(canvas);
+                const normalizedImage = imageData.toFloat().div(255.0); // Normalize pixel values
+
+                const predictions = model.predict(normalizedImage.expandDims(0));
+                const classIndex = predictions.argMax(1).dataSync()[0];
+
+                const classLabels = ['cadeira', 'close', 'mesa', 'open'];
+                const predictedClass = classLabels[classIndex];
+
+                predictionResult.textContent = 'Predicted class: ' + predictedClass;
+                switch (predictedClass) {
+                    case 'cadeira':
+                        audioCadeira.play();
+                        break;
+                    case 'close':
+                        audioClose.play();
+                        break;
+                    case 'mesa':
+                        audioMesa.play();
+                        break;
+                    case 'open':
+                        audioOpen.play();
+                        break;
+                    default:
+                        break;
+                }
+
+                requestAnimationFrame(predict);
+            }
+
+            predict();
+        }
+
+        // Camera selection code from the first snippet
+        var video = document.querySelector("#videoElement");
+        var cameraSelect = document.querySelector("#cameraSelect");
+
+        if (navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.enumerateDevices()
+                .then(function (devices) {
+                    devices.forEach(function (device) {
+                        if (device.kind === 'videoinput') {
+                            var option = document.createElement('option');
+                            option.value = device.deviceId;
+                            option.text = device.label || 'Camera ' + (cameraSelect.length + 1);
+                            cameraSelect.appendChild(option);
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    console.log(err.name + ": " + err.message);
+                });
+
+            cameraSelect.onchange = function () {
+                var selectedDeviceId = cameraSelect.value;
+                var constraints = {
+                    video: { deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined }
+                };
+
+                navigator.mediaDevices.getUserMedia(constraints)
+                    .then(function (stream) {
+                        video.srcObject = stream;
+                    })
+                    .catch(function (err) {
+                        console.log(err.name + ": " + err.message);
+                    });
+            };
+        }
+    </script>
+</body>
+
+</html>
